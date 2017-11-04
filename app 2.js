@@ -1,10 +1,11 @@
 var wifi = require("Wifi");
 
 var server = "m14.cloudmqtt.com";
+
 var options = {
-    port: 18876,
-    username: "daqjruvb",
-    password: "YyyGHwSuFnL6"
+    port: 16610,
+    username: "aawpwmsb",
+    password: "6tz2i2jglC5N"
 };
 
 var mqtt = require("https://github.com/olliephillips/tinyMQTT/blob/master/tinyMQTT.min.js").create(server, options);
@@ -53,7 +54,7 @@ function subscrNew(newId) {
 function viewAllInfo() {
     for (var i = 0; i < relayQuantity; i++) {
         var list = "relay" + i + " id:" + relaysState["relay" + i].id + " state:" + relaysState["relay" + i].state;
-        mqtt.publish("indoor/controls/" + relaysState["relay" + i].id + "_report_listState", list);
+        mqtt.publish("indoor/controls/" + relaysState["relay" + i].id + "," + "_report_listState", list);
     }
 }
 
@@ -67,9 +68,10 @@ mqtt.on('message', function (pub) {
         }
 
         if (pub.topic == topic + "_setState") {
-            var state = pub.message == "1" || "true";
-            relaysState["relay" + index].state = state;
-            mqtt.publish(relayRes, "" + state);
+            //var state = pub.message == "1" || "true";
+            if (pub.message == "1" || pub.message == "true") relaysState["relay" + index].state = true;
+            if (pub.message == "0" || pub.message == "false") relaysState["relay" + index].state = false;
+            mqtt.publish(relayRes, "" + relaysState["relay" + index].state);
         }
 
         if (pub.topic == topic + "_setID") {
@@ -88,10 +90,12 @@ mqtt.on('message', function (pub) {
 
         if (pub.topic == topic + "_getList") {
             viewAllInfo();
+            break;//for single print list of more identional ID
         }
 
         if (pub.topic == topic + "_getTime") {
             mqtt.publish(topic + "_report_workTime", "" + getTime());
+            break;//for single print time of more identional ID       
         }
     }
 });
