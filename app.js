@@ -48,10 +48,17 @@ mqtt.on('connected', function () {
             if (arrayData[1] === "true") stateVar = true;
             else stateVar = false;
 
-            relaysState["relay" + index] = {
-                id: +arrayData[0],
-                state: stateVar
-            };
+            if (!isNaN(+arrayData[0])) {
+                relaysState["relay" + index] = {
+                    id: +arrayData[0],
+                    state: stateVar
+                };
+            } else {
+                relaysState["relay" + index] = {
+                    id: arrayData[0],
+                    state: stateVar
+                };
+            }
         }
         id = +dataRead[1];//restore last ID (for auto generation on setID - auto)
 
@@ -169,11 +176,9 @@ mqtt.on('message', function (pub) {
                 storeToEeprom(1, "" + relaysState["relay" + index].id);//write last ID to special eeprom place
                 storeToEeprom(index + 2, "" + relaysState["relay" + index].id + ":" + relaysState["relay" + index].state);//write auto ID to eeprom
             } else {
-                //var x = +pub.message;//try convert to number
-                //if (x >= 0 && x <= 65535) {
-                relaysState["relay" + index].id = pub.message;//add anyone ID
+                if (!isNaN(+pub.message)) relaysState["relay" + index].id = +pub.message;//add number ID
+                else relaysState["relay" + index].id = pub.message;//add any ID
                 storeToEeprom(index + 2, "" + relaysState["relay" + index].id + ":" + relaysState["relay" + index].state);//write own ID to eeprom
-                //}
             }
             if (relaysState["relay" + index].id != oldID) subscrNew(relaysState["relay" + index].id);//subscribe new ID
             mqtt.publish(devicePath + oldID + "_report_relay" + index, "" + relaysState["relay" + index].id);
