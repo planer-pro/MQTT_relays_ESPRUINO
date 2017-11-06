@@ -1,6 +1,6 @@
 var arr = [];
 
-arr[0] = 1234;
+arr[0] = NaN;
 arr[1] = "ok";
 
-console.log(arr);
+console.log(!isNaN(+arr[0]));
