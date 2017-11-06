@@ -1,12 +1,32 @@
 var wifi = require("Wifi");
+var f = new (require("FlashEEPROM"))();
 
 var server = "m14.cloudmqtt.com";
 
 var options = {
-    port: 16610,
-    username: "aawpwmsb",
-    password: "6tz2i2jglC5N"
+    port: 16639,
+    username: "bpltewxc",
+    password: "SjJmTS2GCs_0"
 };
+
+var id;
+var idLight;
+var relaysState = {};
+
+var accessWrite = true;
+var accessRead = true;
+var queueStore = [];
+var queueRead = [];
+var dataRead = [];
+
+const relayQuantity = 4;
+const devicePath = "indoor/controls/";
+
+E.on('init', function () {
+    for (var index = 0; index < relayQuantity + 2; index++) {
+        readFromEeprom(index);//read all data eeprom
+    }
+});
 
 var mqtt = require("https://github.com/olliephillips/tinyMQTT/blob/master/tinyMQTT.min.js").create(server, options);
 
@@ -14,21 +34,46 @@ wifi.on('connected', function (details) {
     mqtt.connect();
 });
 
-var id;
-var idLight;
-var relayQuantity = 4;
-var relaysState = {};
-
 mqtt.on('connected', function () {
-    for (var index = 0; index < relayQuantity; index++) {
-        if (index === 0) id = setIdMac();
-        else id += 1;
-        subscrNew(id);
-        relaysState["relay" + index] = {
-            id: id,
-            state: false
-        };
+    if (dataRead[0] == "ok") {
+
+        for (var index = 0; index < relayQuantity; index++) {//read all data from eeprom
+
+            var allData = dataRead[index + 2];
+            var arrayData = allData.split(':');
+
+            subscrNew(arrayData[0]);
+
+            var stateVar;
+            if (arrayData[1] === "true") stateVar = true;
+            else stateVar = false;
+
+            relaysState["relay" + index] = {
+                id: +arrayData[0],
+                state: stateVar
+            };
+        }
+        id = +dataRead[1];//restore last ID (for auto generation on setID - auto)
+
+    } else {
+        for (var index2 = 0; index2 < relayQuantity; index2++) {//generate from mac, states = false by default
+
+            if (index2 === 0) id = setIdMac();
+            else id += 1;
+
+            subscrNew(id);
+
+            relaysState["relay" + index2] = {
+                id: id,
+                state: false
+            };
+
+            storeToEeprom(index2 + 2, "" + id + ":" + false);
+        }
+        storeToEeprom(0, "ok");//store eeprom flag
+        storeToEeprom(1, "" + id);//store last ID (for auto generation on setID - auto)
     }
+
     viewAllInfo();
 
     idLight = setInterval(function () {
@@ -44,23 +89,66 @@ function setIdMac() {
 }
 
 function subscrNew(newId) {
-    mqtt.subscribe("indoor/controls/" + newId + "_getState");
-    mqtt.subscribe("indoor/controls/" + newId + "_setState");
-    mqtt.subscribe("indoor/controls/" + newId + "_setID");
-    mqtt.subscribe("indoor/controls/" + newId + "_getList");
-    mqtt.subscribe("indoor/controls/" + newId + "_getTime");
+    mqtt.subscribe(devicePath + newId + "_getState");
+    mqtt.subscribe(devicePath + newId + "_setState");
+    mqtt.subscribe(devicePath + newId + "_setID");
+    mqtt.subscribe(devicePath + newId + "_getList");
+    mqtt.subscribe(devicePath + newId + "_getTime");
+}
+
+function storeToEeprom(adr, item) {
+    queueStore.push(adr);
+    queueStore.push(item);
+
+    if (accessWrite === true) {
+        accessWrite = false;
+
+        var Id = setInterval(function () {
+            var a = queueStore.shift();
+            var i = queueStore.shift();
+            f.write(a, i);
+
+            if (queueStore.length === 0) {
+                clearInterval(Id);
+                accessWrite = true;
+            }
+        }, 10);
+    }
+}
+
+function readFromEeprom(adr) {
+    queueRead.push(adr);
+
+    if (accessRead === true) {
+        accessRead = false;
+
+        var Id = setInterval(function () {
+            var a = queueRead.shift();
+            try {
+                dataRead[a] = E.toString(f.read(a));
+            } catch (error) {
+                clearInterval(Id);
+                accessRead = true;
+            }
+
+            if (queueRead.length === 0) {
+                clearInterval(Id);
+                accessRead = true;
+            }
+        }, 10);
+    }
 }
 
 function viewAllInfo() {
     for (var i = 0; i < relayQuantity; i++) {
         var list = "relay" + i + " id:" + relaysState["relay" + i].id + " state:" + relaysState["relay" + i].state;
-        mqtt.publish("indoor/controls/" + relaysState["relay" + i].id + "," + "_report_listState", list);
+        mqtt.publish(devicePath + relaysState["relay" + i].id + "," + "_report_listState", list);
     }
 }
 
 mqtt.on('message', function (pub) {
     for (var index = 0; index < relayQuantity; index++) {
-        var topic = "indoor/controls/" + relaysState["relay" + index].id;
+        var topic = devicePath + relaysState["relay" + index].id;
         var relayRes = topic + "_report_relay" + index;
 
         if (pub.topic == topic + "_getState") {
@@ -68,9 +156,9 @@ mqtt.on('message', function (pub) {
         }
 
         if (pub.topic == topic + "_setState") {
-            //var state = pub.message == "1" || "true";
             if (pub.message == "1" || pub.message == "true") relaysState["relay" + index].state = true;
             if (pub.message == "0" || pub.message == "false") relaysState["relay" + index].state = false;
+            storeToEeprom(index + 2, "" + relaysState["relay" + index].id + ":" + relaysState["relay" + index].state);
             mqtt.publish(relayRes, "" + relaysState["relay" + index].state);
         }
 
@@ -78,14 +166,17 @@ mqtt.on('message', function (pub) {
             var oldID = relaysState["relay" + index].id;
             if (pub.message == "auto") {
                 relaysState["relay" + index].id = ++id;
+                storeToEeprom(1, "" + relaysState["relay" + index].id);//write last ID to special eeprom place
+                storeToEeprom(index + 2, "" + relaysState["relay" + index].id + ":" + relaysState["relay" + index].state);//write auto ID to eeprom
             } else {
-                var x = +pub.message;//try convert to number
-                if (x >= 0 && x <= 65535) {
-                    relaysState["relay" + index].id = x;//no Nan and in range? ok, next
-                }
+                //var x = +pub.message;//try convert to number
+                //if (x >= 0 && x <= 65535) {
+                relaysState["relay" + index].id = pub.message;//add anyone ID
+                storeToEeprom(index + 2, "" + relaysState["relay" + index].id + ":" + relaysState["relay" + index].state);//write own ID to eeprom
+                //}
             }
-            if (relaysState["relay" + index].id != oldID) subscrNew(relaysState["relay" + index].id);
-            mqtt.publish("indoor/controls/" + oldID + "_report_relay" + index, "" + relaysState["relay" + index].id);
+            if (relaysState["relay" + index].id != oldID) subscrNew(relaysState["relay" + index].id);//subscribe new ID
+            mqtt.publish(devicePath + oldID + "_report_relay" + index, "" + relaysState["relay" + index].id);
         }
 
         if (pub.topic == topic + "_getList") {
@@ -95,7 +186,7 @@ mqtt.on('message', function (pub) {
 
         if (pub.topic == topic + "_getTime") {
             mqtt.publish(topic + "_report_workTime", "" + getTime());
-            break;//for single print time of more identional ID       
+            break;//for single print time of more identional ID
         }
     }
 });
