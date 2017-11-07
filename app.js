@@ -21,6 +21,7 @@ var dataRead = [];
 
 const relayQuantity = 4;
 const devicePath = "indoor/controls/";
+//const reportPath = "indoor/controls/";//future
 
 E.on('init', function () {
     for (var index = 0; index < relayQuantity + 2; index++) {
@@ -96,11 +97,16 @@ function setIdMac() {
 }
 
 function subscrNew(newId) {
-    mqtt.subscribe(devicePath + newId + "_getState");
     mqtt.subscribe(devicePath + newId + "_setState");
     mqtt.subscribe(devicePath + newId + "_setID");
+    //mqtt.subscribe(devicePath + newId + "_setControl");//future
+    //mqtt.subscribe(devicePath + newId + "_setReport");//future
+    //mqtt.subscribe(devicePath + newId + "_setReset");//future
+    //mqtt.subscribe(devicePath + newId + "_setHreset");//future
+    mqtt.subscribe(devicePath + newId + "_getState");
     mqtt.subscribe(devicePath + newId + "_getList");
     mqtt.subscribe(devicePath + newId + "_getTime");
+    //mqtt.subscribe(devicePath + newId + "_getHelp");//future
 }
 
 function storeToEeprom(adr, item) {
