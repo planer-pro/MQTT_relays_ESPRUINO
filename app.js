@@ -20,11 +20,11 @@ var queueRead = [];
 var dataRead = [];
 
 const relayQuantity = 4;
-const devicePath = "indoor/controls/";
-//const reportPath = "indoor/controls/";//future
+var controlPath = "indoor/controls/";
+var reportPath = "indoor/controls/";
 
 E.on('init', function () {
-    for (var index = 0; index < relayQuantity + 2; index++) {
+    for (var index = 0; index < relayQuantity + 4; index++) {// +4-extend eeprom data
         readFromEeprom(index);//read all data eeprom
     }
 });
@@ -40,7 +40,7 @@ mqtt.on('connected', function () {
 
         for (var index = 0; index < relayQuantity; index++) {//read all data from eeprom
 
-            var allData = dataRead[index + 2];
+            var allData = dataRead[index + 4];
             var arrayData = allData.split(':');
 
             subscrNew(arrayData[0]);
@@ -62,6 +62,8 @@ mqtt.on('connected', function () {
             }
         }
         id = +dataRead[1];//restore last ID (for auto generation on setID - auto)
+        controlPath = dataRead[2];//restore control path
+        reportPath = dataRead[3];//restore report path
 
     } else {
         for (var index2 = 0; index2 < relayQuantity; index2++) {//generate from mac, states = false by default
@@ -76,10 +78,12 @@ mqtt.on('connected', function () {
                 state: false
             };
 
-            storeToEeprom(index2 + 2, "" + id + ":" + false);
+            storeToEeprom(index2 + 4, "" + id + ":" + false);
         }
         storeToEeprom(0, "ok");//store eeprom flag
         storeToEeprom(1, "" + id);//store last ID (for auto generation on setID - auto)
+        storeToEeprom(2, controlPath);
+        storeToEeprom(3, reportPath);
     }
 
     viewAllInfo();
@@ -97,16 +101,16 @@ function setIdMac() {
 }
 
 function subscrNew(newId) {
-    mqtt.subscribe(devicePath + newId + "_setState");
-    mqtt.subscribe(devicePath + newId + "_setID");
-    //mqtt.subscribe(devicePath + newId + "_setControl");//future
-    //mqtt.subscribe(devicePath + newId + "_setReport");//future
-    //mqtt.subscribe(devicePath + newId + "_setReset");//future
-    //mqtt.subscribe(devicePath + newId + "_setHreset");//future
-    mqtt.subscribe(devicePath + newId + "_getState");
-    mqtt.subscribe(devicePath + newId + "_getList");
-    mqtt.subscribe(devicePath + newId + "_getTime");
-    //mqtt.subscribe(devicePath + newId + "_getHelp");//future
+    mqtt.subscribe(controlPath + newId + "_setState");
+    mqtt.subscribe(controlPath + newId + "_setID");
+    mqtt.subscribe(controlPath + newId + "_setConPath");
+    mqtt.subscribe(controlPath + newId + "_setRepPath");
+    mqtt.subscribe(controlPath + newId + "_setRestart");
+    mqtt.subscribe(controlPath + newId + "_setReset");
+    mqtt.subscribe(controlPath + newId + "_getState");
+    mqtt.subscribe(controlPath + newId + "_getList");
+    mqtt.subscribe(controlPath + newId + "_getTime");
+    mqtt.subscribe(controlPath + newId + "_getHelp");
 }
 
 function storeToEeprom(adr, item) {
@@ -155,27 +159,45 @@ function readFromEeprom(adr) {
 function viewAllInfo() {
     for (var i = 0; i < relayQuantity; i++) {
         var list = "relay" + i + " id:" + relaysState["relay" + i].id + " state:" + relaysState["relay" + i].state;
-        mqtt.publish(devicePath + relaysState["relay" + i].id + "," + "_report_listState", list);
+        mqtt.publish(reportPath + relaysState["relay" + i].id + "," + "_report_listState", list);
     }
+}
+
+function viewHelp() {
+
+    var hlp = "help_comm:";
+
+    mqtt.publish(reportPath + hlp, "_setState (1,0,true,false)");
+    mqtt.publish(reportPath + hlp, "_setID (auto,any text)");
+    mqtt.publish(reportPath + hlp, "_setConPath (control path)");
+    mqtt.publish(reportPath + hlp, "_setRepPath (report path)");
+    mqtt.publish(reportPath + hlp, "_getState ()");
+    mqtt.publish(reportPath + hlp, "_getList ()");
+    mqtt.publish(reportPath + hlp, "_getTime ()");
+    mqtt.publish(reportPath + hlp, "_setRestart ()");
+    mqtt.publish(reportPath + hlp, "_setReset ()");
+    mqtt.publish(reportPath + hlp, "_getHelp ()");
 }
 
 mqtt.on('message', function (pub) {
     for (var index = 0; index < relayQuantity; index++) {
-        var topic = devicePath + relaysState["relay" + index].id;
-        var relayRes = topic + "_report_relay" + index;
 
-        if (pub.topic == topic + "_getState") {
+        var topicContr = controlPath + relaysState["relay" + index].id;
+        var topicReport = reportPath + relaysState["relay" + index].id;
+        var relayRes = topicReport + "_report_relay" + index;
+
+        if (pub.topic == topicContr + "_getState") {
             mqtt.publish(relayRes, "" + relaysState["relay" + index].state);
         }
 
-        if (pub.topic == topic + "_setState") {
+        if (pub.topic == topicContr + "_setState") {
             if (pub.message == "1" || pub.message == "true") relaysState["relay" + index].state = true;
             if (pub.message == "0" || pub.message == "false") relaysState["relay" + index].state = false;
             storeToEeprom(index + 2, "" + relaysState["relay" + index].id + ":" + relaysState["relay" + index].state);
             mqtt.publish(relayRes, "" + relaysState["relay" + index].state);
         }
 
-        if (pub.topic == topic + "_setID") {
+        if (pub.topic == topicContr + "_setID") {
             var oldID = relaysState["relay" + index].id;
             if (pub.message == "auto") {
                 relaysState["relay" + index].id = ++id;
@@ -187,16 +209,49 @@ mqtt.on('message', function (pub) {
                 storeToEeprom(index + 2, "" + relaysState["relay" + index].id + ":" + relaysState["relay" + index].state);//write own ID to eeprom
             }
             if (relaysState["relay" + index].id != oldID) subscrNew(relaysState["relay" + index].id);//subscribe new ID
-            mqtt.publish(devicePath + oldID + "_report_relay" + index, "" + relaysState["relay" + index].id);
+            mqtt.publish(reportPath + oldID + "_report_relay" + index, "" + relaysState["relay" + index].id);
         }
 
-        if (pub.topic == topic + "_getList") {
+        if (pub.topic == topicContr + "_setConPath") {
+            controlPath = "" + pub.message;
+            storeToEeprom(2, controlPath);
+            mqtt.publish(topicReport, controlPath);
+            break;//for single set path of more identional ID
+        }
+
+        if (pub.topic == topicContr + "_setRepPath") {
+            reportPath = "" + pub.message;
+            storeToEeprom(3, reportPath);
+            mqtt.publish(topicReport, reportPath);
+            break;//for single set path of more identional ID
+        }
+
+        if (pub.topic == topicContr + "_setRestart") {
+            mqtt.publish(topicReport, "restarting");
+            while (1) { }//initiate wachdog restart
+        }
+
+        if (pub.topic == topicContr + "_setReset") {
+            mqtt.publish(topicReport, "reseting");
+            f.erase();//clear all flash eeprom
+            setTimeout(function () {//wait for clear
+                while (1) { }//initiate wachdog restart
+            }, 100);
+            break;
+        }
+
+        if (pub.topic == topicContr + "_getHelp") {
+            viewHelp();
+            break;
+        }
+
+        if (pub.topic == topicContr + "_getList") {
             viewAllInfo();
             break;//for single print list of more identional ID
         }
 
-        if (pub.topic == topic + "_getTime") {
-            mqtt.publish(topic + "_report_workTime", "" + getTime());
+        if (pub.topic == topicContr + "_getTime") {
+            mqtt.publish(topicReport + "_report_workTime", "" + getTime());
             break;//for single print time of more identional ID
         }
     }

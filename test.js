@@ -1,6 +1,7 @@
-var arr = [];
+console.log("0");
 
-arr[0] = NaN;
-arr[1] = "ok";
+setTimeout(function() {
+    console.log("ok");
+}, 2000);
 
-console.log(!isNaN(+arr[0]));
+console.log("1");
