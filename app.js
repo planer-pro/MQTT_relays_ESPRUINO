@@ -193,7 +193,7 @@ mqtt.on('message', function (pub) {
         if (pub.topic == topicContr + "_setState") {
             if (pub.message == "1" || pub.message == "true") relaysState["relay" + index].state = true;
             if (pub.message == "0" || pub.message == "false") relaysState["relay" + index].state = false;
-            storeToEeprom(index + 2, "" + relaysState["relay" + index].id + ":" + relaysState["relay" + index].state);
+            storeToEeprom(index + 4, "" + relaysState["relay" + index].id + ":" + relaysState["relay" + index].state);
             mqtt.publish(relayRes, "" + relaysState["relay" + index].state);
         }
 
@@ -202,11 +202,11 @@ mqtt.on('message', function (pub) {
             if (pub.message == "auto") {
                 relaysState["relay" + index].id = ++id;
                 storeToEeprom(1, "" + relaysState["relay" + index].id);//write last ID to special eeprom place
-                storeToEeprom(index + 2, "" + relaysState["relay" + index].id + ":" + relaysState["relay" + index].state);//write auto ID to eeprom
+                storeToEeprom(index + 4, "" + relaysState["relay" + index].id + ":" + relaysState["relay" + index].state);//write auto ID to eeprom
             } else {
                 if (!isNaN(+pub.message)) relaysState["relay" + index].id = +pub.message;//add number ID
                 else relaysState["relay" + index].id = pub.message;//add any ID
-                storeToEeprom(index + 2, "" + relaysState["relay" + index].id + ":" + relaysState["relay" + index].state);//write own ID to eeprom
+                storeToEeprom(index + 4, "" + relaysState["relay" + index].id + ":" + relaysState["relay" + index].state);//write own ID to eeprom
             }
             if (relaysState["relay" + index].id != oldID) subscrNew(relaysState["relay" + index].id);//subscribe new ID
             mqtt.publish(reportPath + oldID + "_report_relay" + index, "" + relaysState["relay" + index].id);
