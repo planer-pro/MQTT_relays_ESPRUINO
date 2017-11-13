@@ -93,6 +93,13 @@ mqtt.on('connected', function () {
     }, 4000);
 });
 
+function reConnectMqtt(){
+    mqtt.disconnect();
+    setTimeout(function() {
+        mqtt.connect();
+    }, 500);
+}
+
 function setIdMac() {
     var array = wifi.getIP().mac.split(':');
     var idMac = "" + array[4] + array[5];
@@ -208,7 +215,7 @@ mqtt.on('message', function (pub) {
                 else relaysState["relay" + index].id = pub.message;//add any ID
                 storeToEeprom(index + 4, "" + relaysState["relay" + index].id + ":" + relaysState["relay" + index].state);//write own ID to eeprom
             }
-            if (relaysState["relay" + index].id != oldID) subscrNew(relaysState["relay" + index].id);//subscribe new ID
+            if (relaysState["relay" + index].id != oldID) reConnectMqtt();//subscrNew(relaysState["relay" + index].id);//subscribe new ID
             mqtt.publish(reportPath + oldID + "_report_relay" + index, "" + relaysState["relay" + index].id);
         }
 
@@ -216,6 +223,7 @@ mqtt.on('message', function (pub) {
             controlPath = "" + pub.message;
             storeToEeprom(2, controlPath);
             mqtt.publish(topicReport, controlPath);
+            reConnectMqtt();
             break;//for single set path of more identional ID
         }
 
@@ -223,11 +231,13 @@ mqtt.on('message', function (pub) {
             reportPath = "" + pub.message;
             storeToEeprom(3, reportPath);
             mqtt.publish(topicReport, reportPath);
+            reConnectMqtt();
             break;//for single set path of more identional ID
         }
 
         if (pub.topic == topicContr + "_setRestart") {
             mqtt.publish(topicReport, "restarting");
+            mqtt.disconnect();
             while (1) { }//initiate wachdog restart
         }
 
@@ -236,7 +246,8 @@ mqtt.on('message', function (pub) {
             f.erase();//clear all flash eeprom
             setTimeout(function () {//wait for clear
                 while (1) { }//initiate wachdog restart
-            }, 100);
+            }, 200);
+            mqtt.disconnect();
             break;
         }
 
